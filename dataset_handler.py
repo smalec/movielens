@@ -30,8 +30,17 @@ class DatasetHandler(object):
     def ids2titles(self, ids):
         return [self.id_to_title[movieId] for movieId in ids]
     
+    def indices2ids(self, indices):
+        return [self.movie_index_to_movie_id[index] for index in indices]
+    
     def id2index(self, movieId):
         return self.movie_index_to_movie_id.index(movieId)
+    
+    def movie_vector2genres(self, movie_vector):
+        return [self.feature_index2genre(i) for i, x in enumerate(movie_vector) if x == 1]
+    
+    def feature_index2genre(self, feature_index):
+        return genres[feature_index]
 
     def load_movies(self):
         movies_frame = pd.read_csv(os.path.join(self.dataset_path, "movies.dat"), names=["movieId", "title", "genres"], sep="::", engine="python")
