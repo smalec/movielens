@@ -1,73 +1,57 @@
 from random import shuffle
 
 class Evaluator(object):
-    def __init__(self, recommender_class):
-        self.recommender_class = recommender_class
+    def __init__(self, recommender):
+        self.recommender = recommender
     
-    def computeMAP(self, dataset_handler, relevant_treshold=3.0, topN=5):
+    def computeMAP(self, relevant_treshold=3.0, topN=5):
         k_cross = 5
         total_aps = 0.0
         total = 0
-        set_ = dataset_handler.load_users_ratings()
-        set_items = set_.items()
-        shuffle(set_items)
-        set_parts = [
-            set_items[k*(len(set_items)/k_cross):(k+1)*(len(set_items)/k_cross) if k < k_cross-1 else len(set_items)]
-            for k in range(k_cross)
-        ]
-        recommender = self.recommender_class(dataset_handler)
-        for i in range(k_cross):
-            print "Evaluating phase #{}".format(i+1)
-            test_set, train_set = dict(set_parts[i]), dict([user for part in set_parts[:i]+set_parts[i+1:] for user in part])
-            recommender.train(train_set)
-            for user_ratings in test_set.values():
-                user_items = user_ratings.items()
-                shuffle(user_items)
-                parts = [
-                    user_items[k*(len(user_items)/k_cross):(k+1)*(len(user_items)/k_cross) if k < k_cross-1 else len(user_items)]
-                    for k in range(k_cross)
-                ]
-                for j in range(k_cross):
-                    test, training = parts[j], [rat for part in parts[:j]+parts[j+1:] for rat in part]
-                    relevant = [movieId for (movieId, rating) in test if rating >= relevant_treshold]
-                    user_profile = recommender.create_user_profile(dict(training))
-                    predicted = recommender.top(user_profile, topN=topN)
-                    if relevant:
-                        total_aps += self._computeAP(relevant, predicted)
-                        total += 1
+        users_ratings = self.recommender.dataset_handler.load_users_ratings()
+        training_data = {user: user_ratings for user, user_ratings in users_ratings.items() if user < 0.8*len(users_ratings)}
+        test_data = {user: user_ratings for user, user_ratings in users_ratings.items() if user not in training_data}
+        self.recommender.train(training_data)
+        for user_ratings in test_data.values():
+            user_items = user_ratings.items()
+            shuffle(user_items)
+            parts = [
+                user_items[k*(len(user_items)/k_cross):(k+1)*(len(user_items)/k_cross) if k < k_cross-1 else len(user_items)]
+                for k in range(k_cross)
+            ]
+            for i in range(k_cross):
+                test, training = parts[i], [rat for part in parts[:i]+parts[i+1:] for rat in part]
+                relevant = [movieId for (movieId, rating) in test if rating >= relevant_treshold]
+                user_profile = self.recommender.create_user_profile(dict(training))
+                predicted = self.recommender.top(user_profile, topN=topN)
+                if relevant:
+                    total_aps += self._computeAP(relevant, predicted)
+                    total += 1
         return total_aps/total
     
-    def computeRMSE(self, dataset_handler):
+    def computeRMSE(self):
         k_cross = 5
         rse = 0.0
         total = 0
-        set_ = dataset_handler.load_users_ratings()
-        set_items = set_.items()
-        shuffle(set_items)
-        set_parts = [
-            set_items[k*(len(set_items)/k_cross):(k+1)*(len(set_items)/k_cross) if k < k_cross-1 else len(set_items)]
-            for k in range(k_cross)
-        ]
-        recommender = self.recommender_class(dataset_handler)
-        for i in range(k_cross):
-            print "Evaluating phase #{}".format(i+1)
-            test_set, train_set = dict(set_parts[i]), dict([user for part in set_parts[:i]+set_parts[i+1:] for user in part])
-            recommender.train(train_set)
-            for user_ratings in test_set.values():
-                user_items = user_ratings.items()
-                shuffle(user_items)
-                parts = [
-                    user_items[k*(len(user_items)/k_cross):(k+1)*(len(user_items)/k_cross) if k < k_cross-1 else len(user_items)]
-                    for k in range(k_cross)
-                ]
-                for j in range(k_cross):
-                    test, training = parts[j], [rat for part in parts[:j]+parts[j+1:] for rat in part]
-                    user_profile = recommender.create_user_profile(dict(training))
-                    for (movieId, rating) in test:
-                        predicted = recommender.predict_rating(user_profile, movieId)
-                        if predicted > 0:
-                            rse += (rating - recommender.predict_rating(user_profile, movieId))**2
-                            total += 1
+        users_ratings = self.recommender.dataset_handler.load_users_ratings()
+        training_data = {user: user_ratings for user, user_ratings in users_ratings.items() if user < 0.8*len(users_ratings)}
+        test_data = {user: user_ratings for user, user_ratings in users_ratings.items() if user not in training_data}
+        self.recommender.train(training_data)
+        for user_ratings in test_data.values():
+            user_items = user_ratings.items()
+            shuffle(user_items)
+            parts = [
+                user_items[k*(len(user_items)/k_cross):(k+1)*(len(user_items)/k_cross) if k < k_cross-1 else len(user_items)]
+                for k in range(k_cross)
+            ]
+            for i in range(k_cross):
+                test, training = parts[i], [rat for part in parts[:i]+parts[i+1:] for rat in part]
+                user_profile = self.recommender.create_user_profile(dict(training))
+                for (movieId, rating) in test:
+                    predicted = self.recommender.predict_rating(user_profile, movieId)
+                    if predicted > 0:
+                        rse += (rating - predicted)**2
+                        total += 1
         return rse/total
     
     def _computeAP(self, relevant, predicted):
